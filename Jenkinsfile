@@ -23,26 +23,6 @@ node {
             sh "./mvnw com.github.eirslett:frontend-maven-plugin:npm"
         }
 
-        stage('backend tests') {
-            try {
-                sh "./mvnw test"
-            } catch(err) {
-                throw err
-            } finally {
-                junit '**/target/surefire-reports/TEST-*.xml'
-            }
-        }
-
-        stage('frontend tests') {
-            try {
-                sh "./mvnw com.github.eirslett:frontend-maven-plugin:npm -Dfrontend.npm.arguments='run test'"
-            } catch(err) {
-                throw err
-            } finally {
-                junit '**/target/test-results/jest/TESTS-*.xml'
-            }
-        }
-
         stage('packaging') {
             sh "./mvnw verify -Pprod -DskipTests"
             archiveArtifacts artifacts: '**/target/*.war', fingerprint: true
@@ -53,7 +33,7 @@ node {
     stage('build docker') {
         sh "cp -R src/main/docker target/"
         sh "cp target/*.war target/docker/"
-        dockerImage = docker.build('docker-login/jhipstersampleapplication', 'target/docker')
+        dockerImage = docker.build('bnasslahsen/devops-repo', 'target/docker')
     }
 
     stage('publish docker') {
