@@ -5,45 +5,60 @@ node {
         checkout scm
     }
 
-    stage('check java') {
-        sh "java -version"
-    }
+    docker.image('jhipster/jhipster:v5.7.2').inside('-u root -e MAVEN_OPTS="-Duser.home=./"') {
+        stage('check java') {
+            sh "java -version"
+        }
 
-    stage('clean') {
-        sh "chmod +x mvnw"
-        sh "./mvnw clean"
-    }
+        stage('clean') {
+            sh "chmod +x mvnw"
+            sh "./mvnw clean"
+        }
 
-    stage('install tools') {
-        sh "./mvnw com.github.eirslett:frontend-maven-plugin:install-node-and-npm -DnodeVersion=v10.15.3 -DnpmVersion=6.9.0"
-    }
+        stage('install tools') {
+            sh "./mvnw com.github.eirslett:frontend-maven-plugin:install-node-and-npm -DnodeVersion=v10.14.1 -DnpmVersion=6.4.1"
+        }
 
-    stage('npm install') {
-        sh "./mvnw com.github.eirslett:frontend-maven-plugin:npm"
-    }
+        stage('npm install') {
+            sh "./mvnw com.github.eirslett:frontend-maven-plugin:npm"
+        }
 
-    stage('backend tests') {
-        try {
-            sh "./mvnw verify"
-        } catch(err) {
-            throw err
-        } finally {
-            junit '**/target/test-results/**/TEST-*.xml'
+        stage('backend tests') {
+            try {
+                sh "./mvnw test"
+            } catch(err) {
+                throw err
+            } finally {
+                junit '**/target/surefire-reports/TEST-*.xml'
+            }
+        }
+
+        stage('frontend tests') {
+            try {
+                sh "./mvnw com.github.eirslett:frontend-maven-plugin:npm -Dfrontend.npm.arguments='run test'"
+            } catch(err) {
+                throw err
+            } finally {
+                junit '**/target/test-results/jest/TESTS-*.xml'
+            }
+        }
+
+        stage('packaging') {
+            sh "./mvnw verify -Pprod -DskipTests"
+            archiveArtifacts artifacts: '**/target/*.war', fingerprint: true
         }
     }
 
-    stage('frontend tests') {
-        try {
-            sh "./mvnw com.github.eirslett:frontend-maven-plugin:npm -Dfrontend.npm.arguments='run test'"
-        } catch(err) {
-            throw err
-        } finally {
-            junit '**/target/test-results/TESTS-*.xml'
-        }
+    def dockerImage
+    stage('build docker') {
+        sh "cp -R src/main/docker target/"
+        sh "cp target/*.war target/docker/"
+        dockerImage = docker.build('docker-login/jhipstersampleapplication', 'target/docker')
     }
 
-    stage('packaging') {
-        sh "./mvnw verify -Pprod -DskipTests"
-        archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
+    stage('publish docker') {
+        docker.withRegistry('https://registry.hub.docker.com', 'docker-login') {
+            dockerImage.push 'latest'
+        }
     }
 }
